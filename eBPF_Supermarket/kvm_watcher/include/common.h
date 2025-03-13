@@ -19,6 +19,16 @@
 #ifndef __KVM_WATCHER_H
 #define __KVM_WATCHER_H
 
+#define SET_KP_OR_FENTRY_LOAD(function_name, module_name)                    \
+    do {                                                                     \
+        if (fentry_can_attach(#function_name, #module_name)) {                \
+            bpf_program__set_autoload(skel->progs.fentry_##function_name,    \
+                                      true);                                 \
+        } else {                                                             \
+            bpf_program__set_autoload(skel->progs.kp_##function_name, true); \
+        }                                                                    \
+    } while (0)
+
 static const char binary_path[] = "/bin/qemu-system-x86_64";
 #define __ATTACH_UPROBE(skel, sym_name, prog_name, is_retprobe)               \
     do {                                                                      \
@@ -83,6 +93,7 @@ static const char binary_path[] = "/bin/qemu-system-x86_64";
 #define IOAPIC_NUM_PINS 24
 
 #define PFERR_RSVD_MASK (1UL << 3)  // mmio
+
 
 // 定时器模式
 #define APIC_LVT_TIMER_ONESHOT (0 << 17)      // 单次触发
@@ -180,7 +191,17 @@ struct exit_value {
     __u32 count;
     __u32 pad;
 };
-
+struct container_id{
+    char container_id[20];
+};
+//记录进程系统调用的详细信息
+#define MAX_SYSCALL_NUM 462
+struct syscall_value{
+    char container_id[20]; //容器ID
+    char proc_name[20]; //进程名
+    __u32 syscall_id_counts[MAX_SYSCALL_NUM];
+    __u64 syscall_total_delay[MAX_SYSCALL_NUM];
+};
 struct dirty_page_info {
     __u64 gfn;
     __u64 rel_gfn;
@@ -222,6 +243,7 @@ struct process {
     char comm[TASK_COMM_LEN];
 };
 
+
 enum EventType {
     NONE_TYPE,
     VCPU_WAKEUP,
@@ -234,6 +256,7 @@ enum EventType {
     IRQ_INJECT,
     HYPERCALL,
     IOCTL,
+    CONTAINER_SYSCALL,
     TIMER,
 } event_type;
 
@@ -332,6 +355,14 @@ struct common_event {
             __u32 vcpu_id;
             // HYPERCALL 特有成员
         } hypercall_data;
+
+        struct{
+            __u64 pid;
+            __u64 syscall_id;
+            __u64 delay;
+            char comm[20];
+            char container_id[20];
+        } syscall_data;
     };
 };
 
